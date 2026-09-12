@@ -1,4 +1,4 @@
-\# ML Model Monitoring Service
+# ML Model Monitoring Service
 
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-teal) ![scikit--learn](https://img.shields.io/badge/scikit--learn-1.5-orange) ![Docker](https://img.shields.io/badge/Docker-ready-2496ED) ![Tests](https://img.shields.io/badge/tests-14%20passing-brightgreen)
