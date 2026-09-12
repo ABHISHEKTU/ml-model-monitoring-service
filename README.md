@@ -212,8 +212,16 @@ docker build -t model-monitor .
 docker run -p 8000:8000 model-monitor
 
 ```
+## Deployment note
 
+**Live demo**: https://ml-model-monitoring-service.onrender.com/docs
 
+The hosted demo above runs on a free-tier host with an **ephemeral filesystem** —
+uploaded reference data and history may be wiped on redeploy/restart (or after
+the free instance sleeps from inactivity), since `FileStore`/`HistoryStore`
+write to local disk. For real production use, swap these for a persistent
+backend (S3, Postgres) behind the same interface — the storage layer was
+deliberately kept abstracted for exactly this kind of swap.
 
 \## Possible next steps
 
