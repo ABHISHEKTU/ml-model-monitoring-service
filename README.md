@@ -1,239 +1,131 @@
-# ML Model Monitoring Service
+<div align="center">
 
+# 🔍 ML Model Monitoring Service
 
-![Python](https://img.shields.io/badge/Python-3.11-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-teal) ![scikit--learn](https://img.shields.io/badge/scikit--learn-1.5-orange) ![Docker](https://img.shields.io/badge/Docker-ready-2496ED) ![Tests](https://img.shields.io/badge/tests-14%20passing-brightgreen)
+**A production-shaped API that catches ML model drift before it silently tanks your accuracy.**
 
+![Python](https://img.shields.io/badge/Python-3.11-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-teal) ![scikit--learn](https://img.shields.io/badge/scikit--learn-1.5-orange) ![Docker](https://img.shields.io/badge/Docker-ready-2496ED) ![Tests](https://img.shields.io/badge/tests-14%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
+[**Live Demo**](https://ml-model-monitoring-service.onrender.com/docs) · [**API Docs**](https://ml-model-monitoring-service.onrender.com/docs) · [Report Bug](https://github.com/ABHISHEKTU/ml-model-monitoring-service/issues)
 
-A lightweight, production-shaped API that detects \*\*data drift\*\* between a model's
+</div>
 
-training (reference) data and its live (current) production data, using multiple
+---
 
-complementary statistical tests — univariate (KS, PSI), multivariate (domain
+## 📌 The Problem
 
-classifier), and prediction drift.
+A deployed ML model's accuracy can silently degrade in production — long before you have new labels to measure it directly — because the data it sees drifts away from what it was trained on. Most teams find out only after something visibly breaks downstream.
 
+This service is the early-warning layer: it statistically compares live production data against training-time data, across **inputs, feature relationships, and model outputs**, and flags exactly what shifted and by how much.
 
+## ✨ Key Features
 
-## Why this exists
+| Capability | What it catches |
+|---|---|
+| **Univariate drift** (KS test + PSI) | A single feature's distribution shifted — mean, spread, or shape |
+| **Multivariate drift** (domain classifier) | Features individually look fine, but their *relationship* changed (e.g. age/income correlation flips) |
+| **Prediction drift** | The model's *output* distribution shifted, even when inputs look stable — a red flag for pipeline/model bugs |
+| **History tracking** | Every check is timestamped and queryable — trend drift over time, not just a single snapshot |
+| **Fail-soft error handling** | One malformed feature never crashes a whole report; typed exceptions map cleanly to HTTP codes |
+| **Restart-safe persistence** | Reference data *and* its schema survive redeploys — no silent state loss |
 
+## 🏗️ Architecture
 
+```
+Client
+  │
+  ▼
+FastAPI routes (main.py)  ──▶  validates input, maps errors to HTTP
+  │
+  ▼
+DriftMonitor (drift/monitor.py)  ──▶  orchestrates per-feature checks, fail-soft
+  ├── ks_test.py         KS two-sample test (statistical significance)
+  ├── psi.py             Population Stability Index (magnitude)
+  └── multivariate.py    domain classifier (joint-relationship drift)
+  │
+  ▼
+FileStore / HistoryStore (storage.py, history_store.py)  ──▶  persistence, swappable backend
+```
 
-A model's accuracy can silently degrade in production even without new labels to
+Each layer has exactly one job. Drift logic is pure `numpy`/`pandas`/`sklearn` — zero FastAPI dependency, fully unit-testable without a running server. Storage sits behind a small interface so a file-backed store can later be swapped for S3/Postgres without touching any statistics code.
 
-measure it directly, because the input data it sees drifts away from what it was
+## 🧠 The Statistics — Briefly
 
-trained on. This service is the early-warning layer that catches that before
+<details>
+<summary><b>Kolmogorov-Smirnov (KS) test</b> — is the difference statistically real?</summary>
+<br>
 
-accuracy visibly drops.
+Compares the empirical CDFs of two samples. Statistic `D` = the largest vertical gap between them. Distribution-free — no normality assumption, catches any shape/location/scale change. `p-value < 0.05` → the two samples are unlikely to come from the same distribution → drift. Weakness: with large batches, even trivial differences become "significant," which is why it's paired with PSI.
 
+</details>
 
+<details>
+<summary><b>Population Stability Index (PSI)</b> — how big is the shift?</summary>
+<br>
 
-## Features
+Bins the reference distribution (deciles for numeric, categories for categorical), then measures how much the population share per bin moved: `PSI = Σ (cur% − ref%) · ln(cur% / ref%)`. Industry thresholds (from credit scoring): `<0.10` none, `0.10–0.25` moderate, `≥0.25` major. Unlike a p-value, PSI isn't sample-size sensitive — it measures magnitude, which is what you actually want on an alerting dashboard.
 
+</details>
 
+<details>
+<summary><b>Domain classifier</b> — did feature <i>relationships</i> change?</summary>
+<br>
 
-\- \*\*Univariate drift\*\* — Kolmogorov-Smirnov test (statistical significance) + 
+Label reference rows `0`, current rows `1`, train a classifier on all features jointly, measure AUC. If reference and current are the same distribution, the classifier can't beat random guessing (`AUC ≈ 0.5`). A high AUC means the classifier found a real joint pattern separating old from new data — drift that no single-feature test could see.
 
-&#x20; Population Stability Index (magnitude), for numeric and categorical features,
+</details>
 
-&#x20; including detection of unseen categories in live traffic.
+## 🛠️ Engineering Challenges I Hit (and Fixed)
 
-\- \*\*Multivariate drift\*\* — a domain classifier (random forest) trained to
+**1. State that didn't survive a restart.** Feature schema (numeric vs. categorical columns) was initially kept in an in-memory dict. It worked until the server restarted — the dict reset, but the reference *data* stayed on disk, so drift checks failed with a false "no reference set" error. **Fix:** persisted the schema as a JSON sidecar file alongside the reference data, so both survive restarts together.
 
-&#x20; distinguish reference vs. current rows using all features jointly. Catches
+**2. A linear model that couldn't see an obvious pattern.** The multivariate domain classifier initially used `LogisticRegression`. On a deliberately crafted test (age/income correlation flipped between reference and current), it scored **AUC 0.46** — essentially random — because the two correlation patterns formed an X-shape no straight decision boundary can separate. **Fix:** switched to `RandomForestClassifier`, which splits non-linearly; AUC jumped to **0.99** on the same data.
 
-&#x20; cases where individual feature distributions look unchanged but the
+## 📡 API Reference
 
-&#x20; \*relationship between features\* has shifted (e.g. age/income correlation
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/health` | Liveness probe |
+| `POST` | `/reference` | Upload baseline dataset (optionally with `reference_predictions`) |
+| `POST` | `/monitor/drift` | Compare a live batch to baseline → per-feature KS+PSI, `multivariate_drift`, `prediction_drift` |
+| `GET` | `/monitor/history/{model_id}` | Past drift reports for a model, most recent last |
+| `GET` | `/reference/{model_id}/exists` | Check if a baseline is stored |
 
-&#x20; flipping) — something no single-feature test can see.
+Full interactive docs (request/response schemas, try-it-out): **[`/docs`](https://ml-model-monitoring-service.onrender.com/docs)**
 
-\- \*\*Prediction drift\*\* — monitors the model's \*output\* distribution separately
-
-&#x20; from its inputs, using the same KS/PSI machinery.
-
-\- \*\*History tracking\*\* — every drift check is persisted (JSONL) and queryable
-
-&#x20; via `/monitor/history/{model\_id}`, so drift can be tracked over time.
-
-\- \*\*Robust error handling\*\* — typed exceptions (`SchemaMismatchError`,
-
-&#x20; `InsufficientDataError`, `ReferenceNotSetError`) mapped centrally to clean
-
-&#x20; HTTP responses; a single malformed feature never crashes a whole report
-
-&#x20; (fail-soft design).
-
-\- \*\*Persistent, restart-safe storage\*\* — reference data \*and\* its feature
-
-&#x20; config survive server restarts (file-backed, not in-memory).
-
-\- Fully tested (14 pytest tests, unit + API integration) and containerized.
-
-
-
-## Architecture
-
-
-
-Client → FastAPI routes (main.py) → DriftMonitor (drift/monitor.py)
-
-├── ks\_test.py (univariate significance)
-
-├── psi.py (univariate magnitude)
-
-└── multivariate.py (joint relationship drift)
-
-↓ ↓
-
-FileStore (storage.py) HistoryStore (history\_store.py)
-
-
-
-
-
-Each layer has one job: routes validate and translate errors to HTTP; drift
-
-logic is pure numpy/pandas/sklearn with zero FastAPI knowledge (fully unit
-
-testable without a server); storage is swappable (file-backed now, could be
-
-S3/Postgres later) behind a tiny interface.
-
-
-
-## The statistics, briefly
-
-
-
-\- \*\*KS test\*\*: compares empirical CDFs of two samples; answers "is this
-
-&#x20; difference statistically real, not noise?"
-
-\- \*\*PSI\*\*: bins the reference distribution, measures how much the population
-
-&#x20; share per bin shifted; answers "how big is the shift, in a way I can put a
-
-&#x20; stable alert threshold on?" Not sample-size sensitive the way a p-value is.
-
-\- \*\*Domain classifier (multivariate)\*\*: label reference=0/current=1, train a
-
-&#x20; classifier on all features jointly, measure AUC. AUC near 0.5 = distributions
-
-&#x20; indistinguishable; AUC well above 0.5 = classifier found a real joint pattern
-
-&#x20; that separates them, even if no single feature moved.
-
-
-
-## A real bug I hit and fixed
-
-
-
-Initially, the mapping of "which columns are numeric vs. categorical" for each
-
-model was kept in an in-memory Python dict. It worked fine until I restarted the
-
-server (or `--reload` triggered a restart) — the dict reset to empty, so
-
-`/monitor/drift` started failing with a false "no reference set" error, even
-
-though the actual reference \*data\* was safely persisted to disk. Root cause:
-
-two pieces of state tied to the same model\_id, only one of which was durable.
-
-Fixed by persisting the feature config as a JSON sidecar file next to the
-
-reference parquet file, so both survive restarts.
-
-
-
-I also initially used `LogisticRegression` for the multivariate domain
-
-classifier and it failed to detect an intentionally crafted correlation-flip
-
-scenario (AUC \~0.46, near random) — because the two correlation patterns formed
-
-an X-shape that no straight decision boundary can separate. Switching to
-
-`RandomForestClassifier` (which can split non-linearly) fixed it (AUC \~0.99).
-
-
-
-## API
-
-
-
-\- `GET /health`
-
-\- `POST /reference` — upload baseline dataset (optionally with
-
-&#x20; `reference\_predictions`)
-
-\- `POST /monitor/drift` — check a live batch against the baseline; returns
-
-&#x20; per-feature KS+PSI, `multivariate\_drift`, and (if predictions supplied)
-
-&#x20; `prediction\_drift`
-
-\- `GET /monitor/history/{model\_id}` — past drift reports for a model
-
-\- `GET /reference/{model\_id}/exists`
-
-
-
-Interactive docs at `/docs`.
-
-
-
-## Run it
-
-
+## 🚀 Quick Start
 
 ```bash
-
+git clone https://github.com/ABHISHEKTU/ml-model-monitoring-service.git
+cd ml-model-monitoring-service
 pip install -r requirements.txt
-
 uvicorn app.main:app --reload
-
-python -m pytest tests/ -v
-
 ```
 
-
-
-Or with Docker:
-
+Run the test suite:
 ```bash
-
-docker build -t model-monitor .
-
-docker run -p 8000:8000 model-monitor
-
+python -m pytest tests/ -v
 ```
-## Deployment note
 
-**Live demo**: https://ml-model-monitoring-service.onrender.com/docs
+Or run it fully containerized:
+```bash
+docker build -t model-monitor .
+docker run -p 8000:8000 model-monitor
+```
 
-The hosted demo above runs on a free-tier host with an **ephemeral filesystem** —
-uploaded reference data and history may be wiped on redeploy/restart (or after
-the free instance sleeps from inactivity), since `FileStore`/`HistoryStore`
-write to local disk. For real production use, swap these for a persistent
-backend (S3, Postgres) behind the same interface — the storage layer was
-deliberately kept abstracted for exactly this kind of swap.
+## 🌐 Live Demo
 
-## Possible next steps
+**[https://ml-model-monitoring-service.onrender.com/docs](https://ml-model-monitoring-service.onrender.com/docs)**
 
+> ⚠️ Runs on a free-tier host with an **ephemeral filesystem** — uploaded reference data/history may be wiped on redeploy or after the instance sleeps from inactivity, since `FileStore`/`HistoryStore` write to local disk. For real production use, swap these for a persistent backend (S3, Postgres) behind the same interface — the storage layer was deliberately kept abstracted for exactly this kind of swap. The instance may also take 10–30s to respond on first request after being idle.
 
+## 🗺️ Roadmap
 
-\- Scheduled monitoring + alerting (Slack/email) instead of on-demand only
+- [ ] Label drift once ground-truth outcomes arrive (accuracy/calibration over time, not just distributions)
+- [ ] Scheduled monitoring + Slack/email alerting instead of on-demand checks
+- [ ] Dashboard visualizing PSI/AUC trend from `/monitor/history`
+- [ ] Auth + rate limiting for multi-tenant deployment
 
-\- Label drift once ground-truth outcomes arrive (accuracy over time, not just
+## 📄 License
 
-&#x20; input/output distribution)
-
-\- Dashboard visualizing PSI/AUC trend from `/monitor/history`
-
-\- Auth + rate limiting for multi-tenant deployment
-
+MIT — free to use, modify, and learn from.
