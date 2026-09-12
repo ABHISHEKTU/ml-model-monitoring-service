@@ -15,7 +15,7 @@ classifier), and prediction drift.
 
 
 
-\## Why this exists
+## Why this exists
 
 
 
@@ -29,7 +29,7 @@ accuracy visibly drops.
 
 
 
-\## Features
+## Features
 
 
 
@@ -73,7 +73,7 @@ accuracy visibly drops.
 
 
 
-\## Architecture
+## Architecture
 
 
 
@@ -103,7 +103,7 @@ S3/Postgres later) behind a tiny interface.
 
 
 
-\## The statistics, briefly
+## The statistics, briefly
 
 
 
@@ -127,7 +127,7 @@ S3/Postgres later) behind a tiny interface.
 
 
 
-\## A real bug I hit and fixed
+## A real bug I hit and fixed
 
 
 
@@ -161,7 +161,7 @@ an X-shape that no straight decision boundary can separate. Switching to
 
 
 
-\## API
+## API
 
 
 
@@ -187,7 +187,7 @@ Interactive docs at `/docs`.
 
 
 
-\## Run it
+## Run it
 
 
 
@@ -215,7 +215,7 @@ docker run -p 8000:8000 model-monitor
 
 
 
-\## Possible next steps
+## Possible next steps
 
 
 
