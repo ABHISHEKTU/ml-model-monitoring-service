@@ -128,4 +128,4 @@ docker run -p 8000:8000 model-monitor
 
 ## 📄 License
 
-MIT — free to use, modify, and learn from.
+This project is licensed under the [MIT License](LICENSE) — free to use, modify, and learn from.
