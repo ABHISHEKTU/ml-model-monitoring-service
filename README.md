@@ -1,4 +1,4 @@
-\# ML Model Monitoring Service
+# ML Model Monitoring Service
 
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-teal) ![scikit--learn](https://img.shields.io/badge/scikit--learn-1.5-orange) ![Docker](https://img.shields.io/badge/Docker-ready-2496ED) ![Tests](https://img.shields.io/badge/tests-14%20passing-brightgreen)
@@ -15,7 +15,7 @@ classifier), and prediction drift.
 
 
 
-\## Why this exists
+## Why this exists
 
 
 
@@ -29,7 +29,7 @@ accuracy visibly drops.
 
 
 
-\## Features
+## Features
 
 
 
@@ -73,7 +73,7 @@ accuracy visibly drops.
 
 
 
-\## Architecture
+## Architecture
 
 
 
@@ -103,7 +103,7 @@ S3/Postgres later) behind a tiny interface.
 
 
 
-\## The statistics, briefly
+## The statistics, briefly
 
 
 
@@ -127,7 +127,7 @@ S3/Postgres later) behind a tiny interface.
 
 
 
-\## A real bug I hit and fixed
+## A real bug I hit and fixed
 
 
 
@@ -161,7 +161,7 @@ an X-shape that no straight decision boundary can separate. Switching to
 
 
 
-\## API
+## API
 
 
 
@@ -187,7 +187,7 @@ Interactive docs at `/docs`.
 
 
 
-\## Run it
+## Run it
 
 
 
@@ -223,7 +223,7 @@ write to local disk. For real production use, swap these for a persistent
 backend (S3, Postgres) behind the same interface — the storage layer was
 deliberately kept abstracted for exactly this kind of swap.
 
-\## Possible next steps
+## Possible next steps
 
 
 
